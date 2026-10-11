@@ -1,0 +1,14 @@
+pluginManagement {
+    repositories {
+        if (providers.gradleProperty('portLocalMaven').isPresent()) {
+            maven { url = uri(providers.gradleProperty('portLocalMaven').get()) }
+        }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+plugins {
+    id('org.gradle.toolchains.foojay-resolver-convention') version('1.0.0')
+}
+
+rootProject.name = 'ProjectE-Reforged'

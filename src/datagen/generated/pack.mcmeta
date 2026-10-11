@@ -1,0 +1,12 @@
+{
+  "pack": {
+    "description": {
+      "translate": "misc.projecte.pack_description"
+    },
+    "min_format": 84,
+    "max_format": [
+      101,
+      1
+    ]
+  }
+}

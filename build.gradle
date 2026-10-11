@@ -1,0 +1,140 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'com.gradleup.shadow' version '9.3.0'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+version = projecte_version
+group = 'moze_intel.projecte'
+base.archivesName = 'ProjectE-Reforged'
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+    withSourcesJar()
+}
+
+sourceSets {
+    api { resources.srcDirs = [] }
+    main {
+        compileClasspath += api.output
+        runtimeClasspath += api.output
+        resources.srcDir 'src/datagen/generated'
+        resources.exclude '.cache/**'
+        // These integrations have not been ported to the target game version.
+        java.exclude 'moze_intel/projecte/integration/crafttweaker/**',
+                'moze_intel/projecte/integration/recipe_viewer/emi/**'
+    }
+    test {
+        compileClasspath += api.output
+        runtimeClasspath += api.output
+    }
+}
+
+configurations {
+    shaded
+    implementation.extendsFrom shaded
+    apiImplementation.extendsFrom implementation
+    apiCompileOnly.extendsFrom compileOnly
+}
+
+repositories {
+    // Optional developer mirror. A normal checkout uses the public repositories.
+    def developerMirror = null
+    if (providers.gradleProperty('portLocalMaven').isPresent()) {
+        developerMirror = maven { url = uri(providers.gradleProperty('portLocalMaven').get()) }
+    }
+    mavenCentral()
+    def modrinthRepository = maven {
+        name = 'Modrinth'
+        url = uri('https://api.modrinth.com/maven')
+    }
+    exclusiveContent {
+        if (developerMirror != null) forRepositories(developerMirror, modrinthRepository)
+        else forRepositories(modrinthRepository)
+        filter { includeGroup 'maven.modrinth' }
+    }
+}
+
+dependencies {
+    // Pin Modrinth version IDs to the exact integrations used to validate this port.
+    compileOnly "maven.modrinth:jei:${jei_version_id}"
+    compileOnly "maven.modrinth:curios:${curios_version_id}"
+    compileOnly "maven.modrinth:jade:${jade_version_id}"
+    compileOnly "maven.modrinth:the-one-probe:${top_version_id}"
+    compileOnly "maven.modrinth:wthit:${wthit_version_id}"
+    implementation 'org.jetbrains:annotations:26.0.2-1'
+    shaded 'org.apache.commons:commons-math3:3.6.1'
+    testImplementation platform('org.junit:junit-bom:5.13.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation("net.neoforged:testframework:${neo_version}") { transitive = false }
+}
+
+neoForge {
+    enable {
+        version = neo_version
+        enabledSourceSets = [sourceSets.api, sourceSets.main, sourceSets.test]
+    }
+    mods {
+        projecte {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.api
+        }
+    }
+    runs {
+        client {
+            client()
+            gameDirectory = file('run/client')
+        }
+        server {
+            server()
+            programArgument '--nogui'
+            gameDirectory = file('run/server')
+        }
+        gameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = file('run/gametest')
+            systemProperty 'neoforge.enabledGameTestNamespaces', 'projecte'
+        }
+    }
+    unitTest {
+        enable()
+        testedMod = mods.projecte
+        loadedMods = [mods.projecte]
+    }
+}
+
+processResources {
+    def replacements = [version: projecte_version, mc_version: minecraft_version_range,
+                        neo_version: neo_version_range, loader_version: loader_version_range]
+    inputs.properties replacements
+    filesMatching('META-INF/neoforge.mods.toml') { expand replacements }
+}
+
+jar {
+    archiveClassifier = 'unshaded'
+    from sourceSets.api.output
+    from 'LICENSE', 'THIRD_PARTY_NOTICES.md'
+}
+
+shadowJar {
+    archiveClassifier = ''
+    configurations = [project.configurations.shaded]
+    from sourceSets.api.output
+    from 'LICENSE', 'THIRD_PARTY_NOTICES.md'
+    relocate 'org.apache.commons.math3', 'moze_intel.projecte.shaded.org.apache.commons.math3'
+    exclude 'META-INF/maven/**', 'META-INF/versions/**', 'module-info.class'
+}
+
+assemble.dependsOn shadowJar
+sourcesJar {
+    from sourceSets.api.allSource
+    from 'LICENSE', 'THIRD_PARTY_NOTICES.md'
+}
+test { useJUnitPlatform() }
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs.addAll '-Xmaxerrs', '10000'
+}
